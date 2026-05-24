@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mindmap Blog</title>
+<style>
+:root {
+  --bg: #F5F5F5;
+  --red: #E53935;
+  --text: #212121;
+  --muted: #888;
+  --border: #e0e0e0;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif;
+  background: var(--bg); color: var(--text);
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ===== Toolbar ===== */
+.toolbar {
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 12px; display: flex; align-items: center; height: 44px; gap: 4px; flex-shrink: 0;
+}
+.toolbar .logo { color: var(--red); font-size: 16px; font-weight: 700; margin-right: 8px; }
+.toolbar .sep { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
+.btn {
+  padding: 6px 12px; border: 1px solid var(--border); background: #fff;
+  border-radius: 6px; cursor: pointer; font-size: 12px; color: #555; white-space: nowrap;
+  display: flex; align-items: center; gap: 4px;
+}
+.btn:hover { background: #f5f5f5; border-color: #ccc; }
+.btn.primary { background: var(--red); color: #fff; border-color: var(--red); }
+.btn.primary:hover { background: #C62828; }
+
+/* ===== Breadcrumb ===== */
+.breadcrumb-bar {
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 16px; display: flex; align-items: center; height: 32px; flex-shrink: 0;
+}
+#breadcrumb { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+#breadcrumb span { color: var(--muted); }
+#breadcrumb a { color: #1976D2; text-decoration: none; cursor: pointer; white-space: nowrap; }
+#breadcrumb a:hover { text-decoration: underline; }
+#breadcrumb a.current { color: var(--red); font-weight: 600; }
+.search-bar { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.search-bar input {
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+  font-size: 12px; width: 160px; outline: none;
+}
+.search-bar input:focus { border-color: var(--red); }
+
+/* ===== Main Canvas ===== */
+#canvasContainer {
+  flex: 1; overflow: hidden; position: relative;
+}
+#mindmapCanvas { display: block; }
+
+/* ===== Status Bar ===== */
+.statusbar {
+  background: #fff; border-top: 1px solid var(--border);
+  padding: 0 16px; display: flex; align-items: center; height: 24px; flex-shrink: 0;
+  font-size: 11px; color: #aaa; gap: 12px;
+}
+
+/* ===== Dropdown ===== */
+.dropdown { position: relative; display: inline-block; }
+.dropdown-menu {
+  display: none; position: absolute; top: 100%; left: 0;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1); z-index: 200; min-width: 140px;
+}
+.dropdown-menu.show { display: block; }
+.dropdown-menu button {
+  display: block; width: 100%; padding: 8px 16px; border: none; background: none;
+  text-align: left; cursor: pointer; font-size: 13px; color: #333;
+}
+.dropdown-menu button:hover { background: #f5f5f5; }
+
+/* ===== Context Menu ===== */
+.ctx-item {
+  padding: 8px 16px; cursor: pointer; display: flex; align-items: center;
+  font-size: 13px; color: #333;
+}
+.ctx-item:hover { background: #f5f5f5; }
+.ctx-item[style*="color:#ccc"] { cursor: default; }
+.ctx-item[style*="color:#ccc"]:hover { background: transparent; }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <span class="logo">🧠 Mindmap Blog</span>
+  <div class="sep"></div>
+  <button class="btn" onclick="handleNew()" title="新建 (Ctrl+N)">📄 新建</button>
+  <button class="btn" onclick="handleFileOpen()" title="打开 JSON 文件">📂 打开</button>
+  <button class="btn" onclick="handleSave()" title="保存 (Ctrl+S)">💾 保存</button>
+  <div class="sep"></div>
+  <div class="dropdown" id="exportDropdown">
+    <button class="btn" onclick="toggleDropdown('exportDropdown')">📤 导出 ▾</button>
+    <div class="dropdown-menu">
+      <button onclick="handleExport('json');toggleDropdown('exportDropdown')">📦 导出 JSON</button>
+      <button onclick="handleExport('html');toggleDropdown('exportDropdown')">🌐 导出 HTML</button>
+      <button onclick="handleExport('md');toggleDropdown('exportDropdown')">📝 导出 Markdown</button>
+    </div>
+  </div>
+  <div class="sep"></div>
+  <button class="btn" onclick="handleUndo()" title="撤销 (Ctrl+Z)">↩ 撤销</button>
+  <button class="btn" onclick="handleRedo()" title="重做 (Ctrl+Shift+Z)">↪ 重做</button>
+  <div class="sep"></div>
+  <button class="btn" onclick="state.selectedNodeId && startEdit(state.selectedNodeId)" title="编辑节点 (F2)">✏️ 编辑</button>
+  <button class="btn" onclick="handleDelete()" title="删除节点 (Del)">🗑️ 删除</button>
+</div>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb-bar">
+  <div id="breadcrumb"></div>
+  <div class="search-bar">
+    <input id="searchInput" placeholder="🔍 搜索节点..." onkeydown="if(event.key==='Enter')handleSearch()">
+  </div>
+</div>
+
+<!-- Canvas -->
+<div id="canvasContainer">
+  <canvas id="mindmapCanvas"></canvas>
+</div>
+
+<!-- Status Bar -->
+<div class="statusbar">
+  <span id="nodeCount">—</span>
+  <span>|</span>
+  <span>右键下钻 · Backspace返回 · 双击/F2编辑 · Tab子节点 · Enter兄弟节点</span>
+  <span style="margin-left:auto" id="zoomInfo">100%</span>
+</div>
+
+<!-- Scripts -->
+<script src="data.js"></script>
+<script src="tree-layout.js"></script>
+<script src="canvas.js"></script>
+<script src="drill-down.js"></script>
+<script src="node-panel.js"></script>
+<script src="keyboard.js"></script>
+<script src="export.js"></script>
+<script src="app.js"></script>
+
+<script>
+// Dropdown toggle
+function toggleDropdown(id) {
+  const menu = document.querySelector('#' + id + ' .dropdown-menu');
+  menu.classList.toggle('show');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.dropdown')) {
+    document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+  }
+});
+</script>
+</body>
+</html>

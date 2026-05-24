@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mindmap Blog · 设计原型展示</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #121212; color: #e0e0e0; line-height: 1.6;
+  }
+  header {
+    background: linear-gradient(135deg, #E53935, #C62828);
+    padding: 48px 24px; text-align: center;
+  }
+  header h1 { font-size: 28px; color: #fff; margin-bottom: 8px; }
+  header p { font-size: 14px; color: rgba(255,255,255,0.7); }
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: #1E1E1E; border-bottom: 1px solid #333;
+    padding: 0 24px; display: flex; gap: 4px; overflow-x: auto;
+  }
+  nav a {
+    color: #9e9e9e; text-decoration: none; padding: 14px 20px;
+    font-size: 13px; border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  nav a:hover, nav a.active { color: #E53935; border-bottom-color: #E53935; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+  section { margin-bottom: 48px; }
+  section h2 {
+    font-size: 20px; color: #E53935; margin-bottom: 8px;
+    padding-bottom: 8px; border-bottom: 1px solid #333;
+  }
+  section h3 { font-size: 15px; color: #bdbdbd; margin: 16px 0 8px; }
+  .diagram {
+    background: #1E1E1E; border-radius: 12px; padding: 16px;
+    margin: 16px 0; overflow-x: auto;
+    border: 1px solid #333;
+  }
+  .diagram svg, .diagram img { max-width: 100%; height: auto; display: block; }
+  .desc { font-size: 13px; color: #888; margin: 8px 0 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge-red { background: #E53935; color: #fff; }
+  .badge-blue { background: #1565C0; color: #fff; }
+  .badge-green { background: #43A047; color: #fff; }
+  .badge-orange { background: #EF6C00; color: #fff; }
+  footer {
+    text-align: center; padding: 32px; font-size: 12px;
+    color: #555; border-top: 1px solid #333;
+  }
+  @media (max-width: 768px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 Mindmap Blog · 设计原型</h1>
+  <p>无限画布 · 多层下钻 · 节点Markdown正文 · 家族关系图谱</p>
+</header>
+
+<nav>
+  <a href="#overview" class="active">总览</a>
+  <a href="#prototypes">原型方案</a>
+  <a href="#dual-mode">双模交互</a>
+  <a href="#node-types">节点类型</a>
+  <a href="#family">家族图谱</a>
+</nav>
+
+<div class="container">
+
+<!-- ==================== OVERVIEW ==================== -->
+<section id="overview">
+  <h2>一、产品总览</h2>
+  <p class="desc">Multi-Layer Mindmap Blog —— 将思维导图的层级结构、无限下钻的聚焦能力、以及 Markdown 富文本笔记三者融合，构建一个树形知识库系统。</p>
+
+  <div class="grid-2">
+    <div class="diagram">
+      <h3>核心定位</h3>
+      <p class="desc">
+        将一本书（或课程/知识体系）以树形思维导图的方式组织，每个节点附带 Markdown 正文，最终导出为独立 HTML 文件分享。
+      </p>
+      <p class="desc">
+        <span class="badge badge-red">无限下钻</span>
+        <span class="badge badge-blue">Markdown正文</span>
+        <span class="badge badge-green">导出HTML</span>
+        <span class="badge badge-orange">家族图谱</span>
+      </p>
+    </div>
+    <div class="diagram">
+      <h3>竞品空白</h3>
+      <p class="desc">
+        目前 GitHub 上没有任何开源项目同时具备「下钻」+「节点 Markdown 正文」+「纯 Web 无限画布」这三个核心能力。
+      </p>
+      <p class="desc">
+        基于 <b>SimpleMindMap</b>（12k★, MIT）二次开发，预估 MVP 2-4 周。
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PROTOTYPES ==================== -->
+<section id="prototypes">
+  <h2>二、三套原型方案</h2>
+
+  <h3>方案 A · 经典双栏 <span class="badge badge-red">桌面端推荐</span></h3>
+  <p class="desc">左侧画布 + 右侧 Markdown 正文面板。适合编辑与阅读并重的场景。</p>
+  <div class="diagram">
+    <img src="diagrams/prototype-a-dual-pane.svg" alt="方案A 经典双栏布局">
+  </div>
+
+  <h3>方案 B · 沉浸阅读 <span class="badge badge-blue">导出HTML默认</span></h3>
+  <p class="desc">暗色背景，目录卡片列表 + 章节阅读视图。类似电子书阅读器。</p>
+  <div class="diagram">
+    <img src="diagrams/prototype-b-immersive-reader.svg" alt="方案B 沉浸阅读模式">
+  </div>
+
+  <h3>方案 C · 混合探索</h3>
+  <p class="desc">左侧大纲树 + 右侧 Markdown 正文。最省空间的布局。</p>
+  <div class="diagram">
+    <img src="diagrams/prototype-c-hybrid-explorer.svg" alt="方案C 混合探索布局">
+  </div>
+</section>
+
+<!-- ==================== DUAL MODE ==================== -->
+<section id="dual-mode">
+  <h2>三、双模交互架构</h2>
+  <p class="desc">同一份 Mindmap 数据，画布模式与阅读模式无缝切换。Ctrl+R 切换，Esc 返回。</p>
+  <div class="diagram">
+    <img src="diagrams/dual-mode-interaction.svg" alt="双模交互架构">
+  </div>
+</section>
+
+<!-- ==================== NODE TYPES ==================== -->
+<section id="node-types">
+  <h2>四、节点类型系统</h2>
+  <p class="desc">7种节点类型，帮助用户快速识别节点性质。支持手动设置或根据内容自动推断。</p>
+  <div class="diagram">
+    <img src="diagrams/node-type-system.svg" alt="节点类型系统">
+  </div>
+</section>
+
+<!-- ==================== FAMILY GRAPH ==================== -->
+<section id="family">
+  <h2>五、家族关系图谱（扩展方向）</h2>
+  <p class="desc">思维导图 ≠ 家族图谱。家族图谱是「图」而非「树」，需要夫妻容器、世代分层、跨图谱跳转三种机制。</p>
+
+  <h3>5.1 核心概念</h3>
+  <div class="diagram">
+    <img src="diagrams/family-graph-core-concepts.svg" alt="家族图谱核心概念">
+  </div>
+
+  <h3>5.2 跨图谱下钻 vs 同图下钻</h3>
+  <div class="diagram">
+    <img src="diagrams/family-graph-cross-drilldown.svg" alt="跨图谱下钻对比">
+  </div>
+
+  <h3>5.3 乾隆家族实例</h3>
+  <div class="diagram">
+    <img src="diagrams/family-graph-qianlong.svg" alt="乾隆家族图谱">
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <p>Mindmap Blog — 设计文档 &amp; 原型 | 2026年5月</p>
+</footer>
+
+</body>
+</html>
