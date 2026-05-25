@@ -213,11 +213,17 @@ function setupCanvasEvents() {
       }
 
       if (hit) {
-        state.selectedNodeId = hit.node.id;
-        scheduleRender(false);
-        if (isPanelOpen()) {
-          const fullNode = findNode(state.mindmap.root, hit.node.id);
-          if (fullNode) openPanel(fullNode.id, fullNode.label, fullNode.content);
+        // 点击已选中的节点 → 直接进入编辑
+        if (hit.node.id === state.selectedNodeId) {
+          startEdit(hit.node.id);
+          scheduleRender(false);
+        } else {
+          state.selectedNodeId = hit.node.id;
+          scheduleRender(false);
+          if (isPanelOpen()) {
+            const fullNode = findNode(state.mindmap.root, hit.node.id);
+            if (fullNode) openPanel(fullNode.id, fullNode.label, fullNode.content);
+          }
         }
       } else {
         state.selectedNodeId = null;
@@ -527,7 +533,11 @@ function handleCreateSibling() {
 }
 
 function handleEdit() {
-  if (state.selectedNodeId) startEdit(state.selectedNodeId);
+  // 如果没选中任何节点，自动选中显示根节点
+  if (!state.selectedNodeId) {
+    state.selectedNodeId = getDisplayRoot(state.mindmap.root).id;
+  }
+  startEdit(state.selectedNodeId);
 }
 
 function handleDelete() {
