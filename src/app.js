@@ -449,11 +449,12 @@ function startEdit(nodeId) {
   input.value = node.label;
   input.style.cssText = `
     position: absolute; left: ${worldX}px; top: ${worldY}px; width: ${w}px; height: ${h}px;
-    border: 2px solid #1565C0; border-radius: ${isRoot ? LAYOUT.rootBorderRadius : LAYOUT.borderRadius}px;
+    border: 3px solid #1565C0; border-radius: ${isRoot ? LAYOUT.rootBorderRadius : LAYOUT.borderRadius}px;
     padding: 0 ${LAYOUT.nodePaddingX}px; font-size: ${node._size.fontSize}px;
     font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif;
     font-weight: 600; outline: none; z-index: 100; box-sizing: border-box;
-    color: ${isRoot ? '#fff' : '#212121'}; background: ${isRoot ? '#E53935' : '#fff'};
+    box-shadow: 0 0 0 3px rgba(21,101,192,0.25);
+    color: ${isRoot ? '#fff' : '#212121'}; background: ${isRoot ? '#C62828' : '#fff'};
   `;
   document.getElementById('canvasContainer').appendChild(input);
   input.focus();

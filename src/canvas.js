@@ -5,6 +5,7 @@ const CANVAS = {
   nodeBg: '#FFFFFF',
   nodeBorder: '#E0E0E0',
   rootBg: '#E53935',
+  rootBgSelected: '#C62828',     // 根节点选中时深一点
   rootText: '#FFFFFF',
   textColor: '#212121',
   linkColor: '#BDBDBD',
@@ -70,9 +71,15 @@ function drawNode(ctx, node, isSelected, isHovered, isDisplayRoot) {
   let borderWidth = 1;
 
   if (isRoot) {
-    bg = CANVAS.rootBg;
+    if (isSelected) {
+      bg = CANVAS.rootBgSelected;
+      borderColor = '#FF6F60';
+      borderWidth = 3;
+    } else {
+      bg = CANVAS.rootBg;
+      borderWidth = 0;
+    }
     textColor = CANVAS.rootText;
-    borderWidth = 0;
   } else if (isSelected) {
     bg = CANVAS.selectBg;
     borderColor = CANVAS.selectBorder;
