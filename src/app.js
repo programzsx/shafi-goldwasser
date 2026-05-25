@@ -73,7 +73,7 @@ function initApp() {
   });
 
   // 面包屑回调
-  onDrillChange = () => { state.selectedNodeId = null; closePanel(); scheduleRender(true); };
+  onDrillChange = () => { state.selectedNodeId = getDisplayRoot(state.mindmap.root).id; closePanel(); scheduleRender(true); };
   onContextAction = handleContextAction;
   getNodeChildren = (nodeId) => {
     const node = findNode(getDisplayRoot(state.mindmap.root), nodeId);
@@ -96,6 +96,7 @@ function initApp() {
   saveHistory(state.mindmap.root);
 
   // 初始渲染
+  state.selectedNodeId = state.mindmap.root.id;  // 默认选中根节点
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); scheduleRender(true); });
   scheduleRender(true);
@@ -529,6 +530,12 @@ function handleEdit() {
 }
 
 function handleDelete() {
+  // Backspace: 如果在子画布，先返回上级而非删除
+  if (drillStack.length > 0) {
+    drillUp();
+    scheduleRender(true);
+    return;
+  }
   if (!state.selectedNodeId) return;
   const deleted = deleteNode(state.mindmap.root, state.selectedNodeId);
   if (deleted) {
@@ -595,7 +602,8 @@ function handleContextAction(action, nodeId) {
       break;
     case 'drill':
       if (drillDown(state.mindmap.root, nodeId)) {
-        state.selectedNodeId = null;
+        // 自动选中显示根节点，让用户可以直接 Tab/Enter
+        state.selectedNodeId = getDisplayRoot(state.mindmap.root).id;
         closePanel();
         scheduleRender(true);
       }
@@ -703,7 +711,7 @@ function handleFileOpen() {
       if (data.root) {
         state.mindmap = data;
         drillStack = [];
-        state.selectedNodeId = null;
+        state.selectedNodeId = data.root.id;
         closePanel();
         saveHistory(state.mindmap.root);
         saveToLocalStorage();
@@ -732,7 +740,7 @@ function handleNew() {
   if (confirm('创建新的思维导图？未保存的更改将丢失。')) {
     state.mindmap = JSON.parse(JSON.stringify(DEFAULT_MINDMAP));
     drillStack = [];
-    state.selectedNodeId = null;
+    state.selectedNodeId = state.mindmap.root.id;
     closePanel();
     saveHistory(state.mindmap.root);
     saveToLocalStorage();
