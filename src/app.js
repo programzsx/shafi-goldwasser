@@ -32,9 +32,23 @@ const state = {
 
 // ===================== 初始化 =====================
 function initApp() {
-  // 加载数据
-  const saved = localStorage.getItem('mindmap-data');
-  state.mindmap = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_MINDMAP));
+  // 加载数据（带版本检查）
+  const savedRaw = localStorage.getItem('mindmap-data');
+  let useDefault = true;
+  if (savedRaw) {
+    try {
+      const saved = JSON.parse(savedRaw);
+      // 版本不匹配则丢弃旧数据
+      if (saved._version === DATA_VERSION) {
+        state.mindmap = saved;
+        useDefault = false;
+      }
+    } catch (e) { /* 数据损坏，用默认 */ }
+  }
+  if (useDefault) {
+    state.mindmap = JSON.parse(JSON.stringify(DEFAULT_MINDMAP));
+    state.mindmap._version = DATA_VERSION;
+  }
 
   // Canvas 初始化
   state.canvas = document.getElementById('mindmapCanvas');
@@ -633,6 +647,7 @@ function fitToScreen() {
 
 // ===================== 持久化 =====================
 function saveToLocalStorage() {
+  state.mindmap._version = DATA_VERSION;
   localStorage.setItem('mindmap-data', JSON.stringify(state.mindmap));
 }
 

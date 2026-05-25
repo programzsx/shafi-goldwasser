@@ -1,73 +1,17 @@
 // data.js — 数据模型 + 默认数据 + CRUD 操作
 
+// 数据版本：升级时旧数据自动清理
+const DATA_VERSION = 2;
+
 // ===================== 默认数据 =====================
 const DEFAULT_MINDMAP = {
   title: "未命名思维导图",
   root: {
     id: "root",
-    label: "思维导图",
-    content: "# 欢迎使用 Mindmap Blog\n\n- 双击节点或按 F2 编辑标题\n- 右键节点进入下钻\n- 点击节点查看/编辑 Markdown 正文\n- Tab 创建子节点\n- Enter 创建兄弟节点",
+    label: "新思维导图",
+    content: "",
     collapsed: false,
-    children: [
-      {
-        id: "c1",
-        label: "语言",
-        content: "## 编程语言\n\n编程语言是开发者与计算机沟通的工具。",
-        collapsed: false,
-        children: [
-          {
-            id: "c1-1",
-            label: "Java",
-            content: "### Java\n\n```java\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello\");\n    }\n}\n```\n\nJava 是一种广泛使用的面向对象编程语言。",
-            collapsed: false,
-            children: [
-              { id: "c1-1-1", label: "基本语法", content: "变量、数据类型、运算符、控制流……", collapsed: false, children: [] },
-              { id: "c1-1-2", label: "面向对象", content: "封装、继承、多态是 Java 面向对象的三大特性。", collapsed: false, children: [] },
-              { id: "c1-1-3", label: "集合框架", content: "List、Set、Map 是 Java 最常用的集合接口。", collapsed: false, children: [] }
-            ]
-          },
-          {
-            id: "c1-2",
-            label: "Python",
-            content: "### Python\n\n```python\ndef hello():\n    print(\"Hello, World!\")\n```\n\nPython 以简洁优雅著称。",
-            collapsed: false,
-            children: [
-              { id: "c1-2-1", label: "基本语法", content: "", collapsed: false, children: [] },
-              { id: "c1-2-2", label: "常用库", content: "NumPy、Pandas、Matplotlib……", collapsed: false, children: [] }
-            ]
-          },
-          {
-            id: "c1-3",
-            label: "Go",
-            content: "### Go\n\nGo 是 Google 开发的静态类型编译语言，以并发编程和高性能著称。",
-            collapsed: false,
-            children: []
-          }
-        ]
-      },
-      {
-        id: "c2",
-        label: "工具",
-        content: "## 开发工具\n\n选择合适的工具可以大幅提升开发效率。",
-        collapsed: false,
-        children: [
-          { id: "c2-1", label: "Git", content: "### Git\n\n分布式版本控制系统。`git init` `git add` `git commit`", collapsed: false, children: [] },
-          { id: "c2-2", label: "Docker", content: "### Docker\n\n容器化技术。`docker run` `docker build`", collapsed: false, children: [] },
-          { id: "c2-3", label: "VSCode", content: "### VSCode\n\n轻量级代码编辑器，拥有丰富的插件生态。", collapsed: false, children: [] }
-        ]
-      },
-      {
-        id: "c3",
-        label: "框架",
-        content: "## 常用框架\n\n框架提供了标准化的开发模式和最佳实践。",
-        collapsed: false,
-        children: [
-          { id: "c3-1", label: "Spring Boot", content: "Java 企业级应用框架。", collapsed: false, children: [] },
-          { id: "c3-2", label: "Django", content: "Python Web 框架，「全家桶」式开发。", collapsed: false, children: [] },
-          { id: "c3-3", label: "Flutter", content: "Google 的跨平台 UI 框架，一套代码多端运行。", collapsed: false, children: [] }
-        ]
-      }
-    ]
+    children: []
   }
 };
 
