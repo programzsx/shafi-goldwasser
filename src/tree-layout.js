@@ -13,13 +13,36 @@ const LAYOUT = {
   rootBorderRadius: 16,
 };
 
-// Canvas 临时测量文字宽度（需要传入 ctx）
+// 文字宽度缓存: key = "text|fontSize" -> width
+let _textWidthCache = {};
+let _textCacheHits = 0;
+let _textCacheMisses = 0;
+
+function _cacheKey(text, fontSize) {
+  return text + '|' + fontSize;
+}
+
+// Canvas 临时测量文字宽度（优化版：无 save/restore，带缓存）
 function measureText(ctx, text, fontSize) {
-  ctx.save();
-  ctx.font = `${fontSize || LAYOUT.fontSize}px -apple-system, "Segoe UI", "PingFang SC", sans-serif`;
+  fontSize = fontSize || LAYOUT.fontSize;
+  const key = _cacheKey(text, fontSize);
+  if (_textWidthCache[key] !== undefined) {
+    _textCacheHits++;
+    return _textWidthCache[key];
+  }
+  _textCacheMisses++;
+  // 直接设置 font，不 save/restore —— layout 阶段 ctx 状态无关紧要
+  ctx.font = `600 ${fontSize}px -apple-system, "Segoe UI", "PingFang SC", sans-serif`;
   const w = ctx.measureText(text).width;
-  ctx.restore();
+  _textWidthCache[key] = w;
   return w;
+}
+
+// 清除文字宽度缓存（节点标签变化时调用）
+function clearTextCache() {
+  _textWidthCache = {};
+  _textCacheHits = 0;
+  _textCacheMisses = 0;
 }
 
 // 计算单个节点的尺寸

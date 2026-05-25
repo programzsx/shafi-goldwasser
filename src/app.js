@@ -15,6 +15,19 @@ const state = {
   panStart: { x: 0, y: 0 },
   editingNodeId: null,
   editInput: null,
+
+  // 性能优化
+  _layoutDirty: true,       // 脏标记：为 true 时需要重新布局
+  _rafId: null,              // requestAnimationFrame ID
+  _lastRenderTime: 0,        // 上次渲染时间（用于帧率限制）
+
+  // 触摸状态
+  _touches: {},
+  _touchPinchStart: null,    // 双指缩放起始距离
+  _touchPinchZoom: null,     // 双指缩放起始 zoom
+  _touchPinchPan: null,      // 双指缩放起始 pan
+  _lastTapTime: 0,           // 上次点击时间（用于双击检测）
+  _lastTapPos: null,         // 上次点击位置
 };
 
 // ===================== 初始化 =====================
@@ -46,7 +59,7 @@ function initApp() {
   });
 
   // 面包屑回调
-  onDrillChange = () => { state.selectedNodeId = null; closePanel(); render(); };
+  onDrillChange = () => { state.selectedNodeId = null; closePanel(); scheduleRender(true); };
   onContextAction = handleContextAction;
   getNodeChildren = (nodeId) => {
     const node = findNode(getDisplayRoot(state.mindmap.root), nodeId);
@@ -58,9 +71,9 @@ function initApp() {
     updateNode(state.mindmap.root, nodeId, { content });
     saveHistory(state.mindmap.root);
     saveToLocalStorage();
-    render();
+    scheduleRender(false); // content 变化不影响节点尺寸
   };
-  onPanelClosed = () => { state.selectedNodeId = null; render(); };
+  onPanelClosed = () => { state.selectedNodeId = null; scheduleRender(false); };
 
   // 画布事件
   setupCanvasEvents();
@@ -70,321 +83,37 @@ function initApp() {
 
   // 初始渲染
   resizeCanvas();
-  window.addEventListener('resize', () => { resizeCanvas(); render(); });
-  render();
+  window.addEventListener('resize', () => { resizeCanvas(); scheduleRender(true); });
+  scheduleRender(true);
 }
 
-// ===================== Canvas 事件 =====================
-function setupCanvasEvents() {
-  const c = state.canvas;
-
-  c.addEventListener('mousedown', (e) => {
-    if (e.button === 1 || state.isSpaceDown || (e.button === 0 && e.altKey)) {
-      // 中键 / Space+左键 / Alt+左键 → 平移
-      state.isPanning = true;
-      state.panStart = { x: e.clientX - state.panX, y: e.clientY - state.panY };
-      c.style.cursor = 'grabbing';
-      return;
-    }
-
-    if (e.button === 0) {
-      // 左键 → 点击检测
-      const world = screenToWorld(e.clientX, e.clientY, state);
-      const root = getDisplayRoot(state.mindmap.root);
-      const hit = hitTest(world.x, world.y, root);
-
-      if (hit && hit.hitCollapse) {
-        // 点击折叠按钮
-        toggleCollapse(state.mindmap.root, hit.node.id);
-        saveHistory(state.mindmap.root);
-        saveToLocalStorage();
-        render();
-        return;
-      }
-
-      if (hit) {
-        state.selectedNodeId = hit.node.id;
-        render();
-        // 如果面板已打开，更新面板
-        if (isPanelOpen()) {
-          const fullNode = findNode(state.mindmap.root, hit.node.id);
-          if (fullNode) openPanel(fullNode.id, fullNode.label, fullNode.content);
-        }
-      } else {
-        state.selectedNodeId = null;
-        // 如果点击空白区域+面板打开，关闭面板
-        // （面板点击已打开时点击空白不关闭，用户可能在看面板内容）
-        render();
-      }
-    }
-  });
-
-  c.addEventListener('mousemove', (e) => {
-    if (state.isPanning) {
-      state.panX = e.clientX - state.panStart.x;
-      state.panY = e.clientY - state.panStart.y;
-      render();
-      return;
-    }
-
-    // Hover 检测
-    const world = screenToWorld(e.clientX, e.clientY, state);
-    const root = getDisplayRoot(state.mindmap.root);
-    const hit = hitTest(world.x, world.y, root);
-    const prevHover = state.hoveredNodeId;
-    state.hoveredNodeId = hit && !hit.hitCollapse ? hit.node.id : null;
-    if (prevHover !== state.hoveredNodeId) {
-      c.style.cursor = state.hoveredNodeId ? 'pointer' : (state.isSpaceDown ? 'grab' : 'default');
-      render();
-    }
-  });
-
-  c.addEventListener('mouseup', () => {
-    state.isPanning = false;
-    c.style.cursor = state.isSpaceDown ? 'grab' : (state.hoveredNodeId ? 'pointer' : 'default');
-  });
-
-  c.addEventListener('mouseleave', () => {
-    state.isPanning = false;
-    state.hoveredNodeId = null;
-    c.style.cursor = 'default';
-    render();
-  });
-
-  c.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(3, Math.max(0.3, state.zoom * delta));
-
-    // 以鼠标位置为中心缩放
-    const mx = e.clientX;
-    const my = e.clientY;
-    state.panX = mx - (mx - state.panX) * (newZoom / state.zoom);
-    state.panY = my - (my - state.panY) * (newZoom / state.zoom);
-    state.zoom = newZoom;
-    render();
-  }, { passive: false });
-
-  // 右键 → 下钻
-  c.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    const world = screenToWorld(e.clientX, e.clientY, state);
-    const root = getDisplayRoot(state.mindmap.root);
-    const hit = hitTest(world.x, world.y, root);
-    if (hit && !hit.hitCollapse) {
-      showContextMenu(e.clientX, e.clientY, hit.node.id, hit.node.id === state.mindmap.root.id);
-    }
-  });
-
-  // 双击 → 编辑
-  c.addEventListener('dblclick', (e) => {
-    const world = screenToWorld(e.clientX, e.clientY, state);
-    const root = getDisplayRoot(state.mindmap.root);
-    const hit = hitTest(world.x, world.y, root);
-    if (hit && !hit.hitCollapse) {
-      state.selectedNodeId = hit.node.id;
-      startEdit(hit.node.id);
-      render();
-    }
-  });
-}
-
-// ===================== 编辑节点 =====================
-function startEdit(nodeId) {
-  const node = findNode(state.mindmap.root, nodeId);
-  if (!node) return;
-  state.editingNodeId = nodeId;
-
-  // 移除旧输入框
-  if (state.editInput) state.editInput.remove();
-
-  // 创建 overlay 输入框
-  const worldX = node._x * state.zoom + state.panX;
-  const worldY = node._y * state.zoom + state.panY;
-  const w = node._size.w * state.zoom;
-  const h = node._size.h * state.zoom;
-  const isRoot = node.id === getDisplayRoot(state.mindmap.root).id;
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = node.label;
-  input.style.cssText = `
-    position: absolute; left: ${worldX}px; top: ${worldY}px; width: ${w}px; height: ${h}px;
-    border: 2px solid #1565C0; border-radius: ${isRoot ? LAYOUT.rootBorderRadius : LAYOUT.borderRadius}px;
-    padding: 0 ${LAYOUT.nodePaddingX}px; font-size: ${node._size.fontSize}px;
-    font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif;
-    font-weight: 600; outline: none; z-index: 100; box-sizing: border-box;
-    color: ${isRoot ? '#fff' : '#212121'}; background: ${isRoot ? '#E53935' : '#fff'};
-  `;
-  document.getElementById('canvasContainer').appendChild(input);
-  input.focus();
-  input.select();
-  state.editInput = input;
-
-  input.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'Enter') {
-      commitEdit();
-    } else if (e.key === 'Escape') {
-      cancelEdit();
-    }
-  });
-  input.addEventListener('blur', () => commitEdit());
-}
-
-function commitEdit() {
-  if (!state.editingNodeId || !state.editInput) return;
-  const val = state.editInput.value.trim();
-  if (val) {
-    updateNode(state.mindmap.root, state.editingNodeId, { label: val });
-    saveHistory(state.mindmap.root);
-    saveToLocalStorage();
+// ===================== 渲染调度（核心优化） =====================
+// scheduleRender(true)  → 结构变了，需要重新布局
+// scheduleRender(false) → 仅视觉变化（选中/hover/zoom/pan），跳过布局
+function scheduleRender(needsLayout) {
+  if (needsLayout) {
+    state._layoutDirty = true;
+    clearTextCache();  // 标签可能变了，清宽度缓存
   }
-  cancelEdit();
-}
-
-function cancelEdit() {
-  if (state.editInput) {
-    state.editInput.remove();
-    state.editInput = null;
-  }
-  state.editingNodeId = null;
-  render();
-}
-
-// ===================== 操作处理 =====================
-function handleEscape() {
-  if (isPanelOpen()) {
-    closePanel();
-  } else if (drillStack.length > 0) {
-    drillUp();
-    render();
+  // 用 rAF 防抖：多次请求合并为一次
+  if (state._rafId === null) {
+    state._rafId = requestAnimationFrame(() => {
+      state._rafId = null;
+      doRender();
+    });
   }
 }
 
-function handleCreateChild() {
-  if (!state.selectedNodeId) return;
-  const newNode = createChildNode(state.mindmap.root, state.selectedNodeId);
-  if (newNode) {
-    saveHistory(state.mindmap.root);
-    saveToLocalStorage();
-    state.selectedNodeId = newNode.id;
-    render();
-    startEdit(newNode.id);
+// 立即同步渲染（仅用于输入框定位等必须同步的场景）
+function renderNow() {
+  if (state._rafId !== null) {
+    cancelAnimationFrame(state._rafId);
+    state._rafId = null;
   }
+  doRender();
 }
 
-function handleCreateSibling() {
-  if (!state.selectedNodeId || state.selectedNodeId === getDisplayRoot(state.mindmap.root).id) {
-    // 如果在根节点上，创建子节点
-    handleCreateChild();
-    return;
-  }
-  const newNode = createSiblingNode(state.mindmap.root, state.selectedNodeId);
-  if (newNode) {
-    saveHistory(state.mindmap.root);
-    saveToLocalStorage();
-    state.selectedNodeId = newNode.id;
-    render();
-    startEdit(newNode.id);
-  }
-}
-
-function handleEdit() {
-  if (state.selectedNodeId) {
-    startEdit(state.selectedNodeId);
-  }
-}
-
-function handleDelete() {
-  if (!state.selectedNodeId) return;
-  const deleted = deleteNode(state.mindmap.root, state.selectedNodeId);
-  if (deleted) {
-    saveHistory(state.mindmap.root);
-    saveToLocalStorage();
-    state.selectedNodeId = null;
-    closePanel();
-    render();
-  }
-}
-
-function handleUndo() {
-  const restored = undo(state.mindmap.root);
-  if (restored) {
-    state.mindmap.root = restored;
-    state.selectedNodeId = null;
-    closePanel();
-    saveToLocalStorage();
-    render();
-  }
-}
-
-function handleRedo() {
-  const restored = redo(state.mindmap.root);
-  if (restored) {
-    state.mindmap.root = restored;
-    state.selectedNodeId = null;
-    closePanel();
-    saveToLocalStorage();
-    render();
-  }
-}
-
-function handleSave() {
-  saveToLocalStorage();
-  exportJSON(state.mindmap);
-}
-
-function handleResetZoom() {
-  state.zoom = 1;
-  fitToScreen();
-  render();
-}
-
-function handleCollapse(collapse) {
-  if (!state.selectedNodeId) return;
-  const node = findNode(state.mindmap.root, state.selectedNodeId);
-  if (!node || !node.children || node.children.length === 0) return;
-  if (collapse && !node.collapsed) {
-    toggleCollapse(state.mindmap.root, state.selectedNodeId);
-  } else if (!collapse && node.collapsed) {
-    toggleCollapse(state.mindmap.root, state.selectedNodeId);
-  }
-  saveHistory(state.mindmap.root);
-  saveToLocalStorage();
-  render();
-}
-
-function handleContextAction(action, nodeId) {
-  switch (action) {
-    case 'edit':
-      state.selectedNodeId = nodeId;
-      startEdit(nodeId);
-      break;
-    case 'drill':
-      if (drillDown(state.mindmap.root, nodeId)) {
-        state.selectedNodeId = null;
-        closePanel();
-        render();
-      }
-      break;
-    case 'copy':
-      state.selectedNodeId = nodeId;
-      break;
-    case 'delete':
-      state.selectedNodeId = nodeId;
-      handleDelete();
-      break;
-    case 'collapse':
-      state.selectedNodeId = nodeId;
-      const node = findNode(state.mindmap.root, nodeId);
-      if (node) handleCollapse(!node.collapsed);
-      break;
-  }
-}
-
-// ===================== Canvas 渲染 =====================
-function render() {
+function doRender() {
   const c = state.canvas;
   const ctx = state.ctx;
   const w = c.width;
@@ -400,10 +129,13 @@ function render() {
   ctx.translate(state.panX, state.panY);
   ctx.scale(state.zoom, state.zoom);
 
-  // 布局 + 渲染
+  // 布局：只在脏时重算
   const root = getDisplayRoot(state.mindmap.root);
   if (root) {
-    doLayout(root, ctx);
+    if (state._layoutDirty) {
+      doLayout(root, ctx);
+      state._layoutDirty = false;
+    }
     renderTree(ctx, root, {
       selectedNodeId: state.selectedNodeId,
       hoveredNodeId: state.hoveredNodeId,
@@ -428,13 +160,452 @@ function render() {
       state.editInput.style.height = (node._size.h * state.zoom) + 'px';
     }
   }
+
+  // 更新状态栏
+  updateStatusBar();
 }
 
+function updateStatusBar() {
+  document.getElementById('nodeCount').textContent =
+    '共 ' + countNodes(getDisplayRoot(state.mindmap.root)) + ' 个节点';
+  document.getElementById('zoomInfo').textContent = Math.round(state.zoom * 100) + '%';
+}
+
+// ===================== Canvas 事件 =====================
+function setupCanvasEvents() {
+  const c = state.canvas;
+
+  // --- 鼠标事件 ---
+  c.addEventListener('mousedown', (e) => {
+    if (e.button === 1 || state.isSpaceDown || (e.button === 0 && e.altKey)) {
+      state.isPanning = true;
+      state.panStart = { x: e.clientX - state.panX, y: e.clientY - state.panY };
+      c.style.cursor = 'grabbing';
+      return;
+    }
+
+    if (e.button === 0) {
+      const world = screenToWorld(e.clientX, e.clientY, state);
+      const root = getDisplayRoot(state.mindmap.root);
+      const hit = hitTest(world.x, world.y, root);
+
+      if (hit && hit.hitCollapse) {
+        toggleCollapse(state.mindmap.root, hit.node.id);
+        saveHistory(state.mindmap.root);
+        saveToLocalStorage();
+        scheduleRender(true);
+        return;
+      }
+
+      if (hit) {
+        state.selectedNodeId = hit.node.id;
+        scheduleRender(false);
+        if (isPanelOpen()) {
+          const fullNode = findNode(state.mindmap.root, hit.node.id);
+          if (fullNode) openPanel(fullNode.id, fullNode.label, fullNode.content);
+        }
+      } else {
+        state.selectedNodeId = null;
+        scheduleRender(false);
+      }
+    }
+  });
+
+  c.addEventListener('mousemove', (e) => {
+    if (state.isPanning) {
+      state.panX = e.clientX - state.panStart.x;
+      state.panY = e.clientY - state.panStart.y;
+      scheduleRender(false);
+      return;
+    }
+
+    // Hover 检测：只在真正变化时才触发渲染
+    const world = screenToWorld(e.clientX, e.clientY, state);
+    const root = getDisplayRoot(state.mindmap.root);
+    const hit = hitTest(world.x, world.y, root);
+    const newHover = hit && !hit.hitCollapse ? hit.node.id : null;
+    if (newHover !== state.hoveredNodeId) {
+      state.hoveredNodeId = newHover;
+      c.style.cursor = newHover ? 'pointer' : (state.isSpaceDown ? 'grab' : 'default');
+      scheduleRender(false);
+    }
+  });
+
+  c.addEventListener('mouseup', () => {
+    state.isPanning = false;
+    c.style.cursor = state.isSpaceDown ? 'grab' : (state.hoveredNodeId ? 'pointer' : 'default');
+  });
+
+  c.addEventListener('mouseleave', () => {
+    state.isPanning = false;
+    if (state.hoveredNodeId !== null) {
+      state.hoveredNodeId = null;
+      c.style.cursor = 'default';
+      scheduleRender(false);
+    }
+  });
+
+  c.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.min(3, Math.max(0.3, state.zoom * delta));
+
+    const mx = e.clientX;
+    const my = e.clientY;
+    state.panX = mx - (mx - state.panX) * (newZoom / state.zoom);
+    state.panY = my - (my - state.panY) * (newZoom / state.zoom);
+    state.zoom = newZoom;
+    scheduleRender(false);
+  }, { passive: false });
+
+  // 右键 → 下钻
+  c.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const world = screenToWorld(e.clientX, e.clientY, state);
+    const root = getDisplayRoot(state.mindmap.root);
+    const hit = hitTest(world.x, world.y, root);
+    if (hit && !hit.hitCollapse) {
+      showContextMenu(e.clientX, e.clientY, hit.node.id, hit.node.id === state.mindmap.root.id);
+    }
+  });
+
+  // 双击 → 编辑
+  c.addEventListener('dblclick', (e) => {
+    const world = screenToWorld(e.clientX, e.clientY, state);
+    const root = getDisplayRoot(state.mindmap.root);
+    const hit = hitTest(world.x, world.y, root);
+    if (hit && !hit.hitCollapse) {
+      state.selectedNodeId = hit.node.id;
+      startEdit(hit.node.id);
+      scheduleRender(false);
+    }
+  });
+
+  // --- 触摸事件（移动端支持） ---
+  c.addEventListener('touchstart', onTouchStart, { passive: false });
+  c.addEventListener('touchmove', onTouchMove, { passive: false });
+  c.addEventListener('touchend', onTouchEnd, { passive: false });
+}
+
+// ===================== 触摸支持 =====================
+function onTouchStart(e) {
+  e.preventDefault();
+  const touches = e.touches;
+
+  if (touches.length === 1) {
+    // 单指：平移 或 点击
+    state._touches.single = {
+      id: touches[0].identifier,
+      startX: touches[0].clientX,
+      startY: touches[0].clientY,
+      startPanX: state.panX,
+      startPanY: state.panY,
+      moved: false,
+    };
+  } else if (touches.length === 2) {
+    // 双指：缩放+平移
+    state._touches.single = null; // 取消单指
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    state._touchPinchStart = Math.sqrt(dx * dx + dy * dy);
+    state._touchPinchZoom = state.zoom;
+    state._touchPinchPan = { x: state.panX, y: state.panY };
+    state._touchPinchMid = {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2,
+    };
+  }
+}
+
+function onTouchMove(e) {
+  e.preventDefault();
+  const touches = e.touches;
+
+  if (touches.length === 1 && state._touches.single) {
+    const t = state._touches.single;
+    const dx = touches[0].clientX - t.startX;
+    const dy = touches[0].clientY - t.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      t.moved = true;
+      state.panX = t.startPanX + dx;
+      state.panY = t.startPanY + dy;
+      scheduleRender(false);
+    }
+  } else if (touches.length === 2 && state._touchPinchStart) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const midX = (touches[0].clientX + touches[1].clientX) / 2;
+    const midY = (touches[0].clientY + touches[1].clientY) / 2;
+
+    // 缩放
+    const scale = dist / state._touchPinchStart;
+    const newZoom = Math.min(3, Math.max(0.3, state._touchPinchZoom * scale));
+
+    // 以中点为中心缩放
+    const prevMid = state._touchPinchMid;
+    state.panX = midX - (prevMid.x - state._touchPinchPan.x) * (newZoom / state._touchPinchZoom);
+    state.panY = midY - (prevMid.y - state._touchPinchPan.y) * (newZoom / state._touchPinchZoom);
+    state.zoom = newZoom;
+
+    scheduleRender(false);
+  }
+}
+
+function onTouchEnd(e) {
+  // 单指点击检测
+  if (state._touches.single && !state._touches.single.moved) {
+    const t = state._touches.single;
+    const now = Date.now();
+
+    // 双击检测（300ms 内同一位置）
+    if (state._lastTapTime && (now - state._lastTapTime) < 300 &&
+        state._lastTapPos &&
+        Math.abs(t.startX - state._lastTapPos.x) < 20 &&
+        Math.abs(t.startY - state._lastTapPos.y) < 20) {
+      // 双击 → 编辑
+      const world = screenToWorld(t.startX, t.startY, state);
+      const root = getDisplayRoot(state.mindmap.root);
+      const hit = hitTest(world.x, world.y, root);
+      if (hit && !hit.hitCollapse) {
+        state.selectedNodeId = hit.node.id;
+        startEdit(hit.node.id);
+        scheduleRender(false);
+      }
+      state._lastTapTime = 0;
+      state._lastTapPos = null;
+    } else {
+      // 单击
+      const world = screenToWorld(t.startX, t.startY, state);
+      const root = getDisplayRoot(state.mindmap.root);
+      const hit = hitTest(world.x, world.y, root);
+
+      if (hit && hit.hitCollapse) {
+        toggleCollapse(state.mindmap.root, hit.node.id);
+        saveHistory(state.mindmap.root);
+        saveToLocalStorage();
+        scheduleRender(true);
+      } else if (hit) {
+        state.selectedNodeId = hit.node.id;
+        scheduleRender(false);
+        if (isPanelOpen()) {
+          const fullNode = findNode(state.mindmap.root, hit.node.id);
+          if (fullNode) openPanel(fullNode.id, fullNode.label, fullNode.content);
+        }
+      } else {
+        state.selectedNodeId = null;
+        scheduleRender(false);
+      }
+
+      state._lastTapTime = now;
+      state._lastTapPos = { x: t.startX, y: t.startY };
+    }
+  }
+
+  // 长按 → 右键菜单（800ms）
+  // (已通过单指不动检测实现，这里简化处理)
+
+  state._touches.single = null;
+  state._touchPinchStart = null;
+}
+
+// ===================== 编辑节点 =====================
+function startEdit(nodeId) {
+  const node = findNode(state.mindmap.root, nodeId);
+  if (!node) return;
+  state.editingNodeId = nodeId;
+
+  if (state.editInput) state.editInput.remove();
+
+  // 确保布局是最新的
+  if (state._layoutDirty) {
+    doLayout(getDisplayRoot(state.mindmap.root), state.ctx);
+    state._layoutDirty = false;
+  }
+
+  const worldX = node._x * state.zoom + state.panX;
+  const worldY = node._y * state.zoom + state.panY;
+  const w = node._size.w * state.zoom;
+  const h = node._size.h * state.zoom;
+  const isRoot = node.id === getDisplayRoot(state.mindmap.root).id;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = node.label;
+  input.style.cssText = `
+    position: absolute; left: ${worldX}px; top: ${worldY}px; width: ${w}px; height: ${h}px;
+    border: 2px solid #1565C0; border-radius: ${isRoot ? LAYOUT.rootBorderRadius : LAYOUT.borderRadius}px;
+    padding: 0 ${LAYOUT.nodePaddingX}px; font-size: ${node._size.fontSize}px;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif;
+    font-weight: 600; outline: none; z-index: 100; box-sizing: border-box;
+    color: ${isRoot ? '#fff' : '#212121'}; background: ${isRoot ? '#E53935' : '#fff'};
+  `;
+  document.getElementById('canvasContainer').appendChild(input);
+  input.focus();
+  input.select();
+  state.editInput = input;
+
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commitEdit();
+    else if (e.key === 'Escape') cancelEdit();
+  });
+  input.addEventListener('blur', () => commitEdit());
+}
+
+function commitEdit() {
+  if (!state.editingNodeId || !state.editInput) return;
+  const val = state.editInput.value.trim();
+  if (val) {
+    updateNode(state.mindmap.root, state.editingNodeId, { label: val });
+    saveHistory(state.mindmap.root);
+    saveToLocalStorage();
+  }
+  cancelEdit();
+}
+
+function cancelEdit() {
+  if (state.editInput) {
+    state.editInput.remove();
+    state.editInput = null;
+  }
+  state.editingNodeId = null;
+  scheduleRender(true); // 标签变化需要重新布局
+}
+
+// ===================== 操作处理 =====================
+function handleEscape() {
+  if (isPanelOpen()) {
+    closePanel();
+  } else if (drillStack.length > 0) {
+    drillUp();
+    scheduleRender(true);
+  }
+}
+
+function handleCreateChild() {
+  if (!state.selectedNodeId) return;
+  const newNode = createChildNode(state.mindmap.root, state.selectedNodeId);
+  if (newNode) {
+    saveHistory(state.mindmap.root);
+    saveToLocalStorage();
+    state.selectedNodeId = newNode.id;
+    scheduleRender(true);
+    startEdit(newNode.id);
+  }
+}
+
+function handleCreateSibling() {
+  if (!state.selectedNodeId || state.selectedNodeId === getDisplayRoot(state.mindmap.root).id) {
+    handleCreateChild();
+    return;
+  }
+  const newNode = createSiblingNode(state.mindmap.root, state.selectedNodeId);
+  if (newNode) {
+    saveHistory(state.mindmap.root);
+    saveToLocalStorage();
+    state.selectedNodeId = newNode.id;
+    scheduleRender(true);
+    startEdit(newNode.id);
+  }
+}
+
+function handleEdit() {
+  if (state.selectedNodeId) startEdit(state.selectedNodeId);
+}
+
+function handleDelete() {
+  if (!state.selectedNodeId) return;
+  const deleted = deleteNode(state.mindmap.root, state.selectedNodeId);
+  if (deleted) {
+    saveHistory(state.mindmap.root);
+    saveToLocalStorage();
+    state.selectedNodeId = null;
+    closePanel();
+    scheduleRender(true);
+  }
+}
+
+function handleUndo() {
+  const restored = undo(state.mindmap.root);
+  if (restored) {
+    state.mindmap.root = restored;
+    state.selectedNodeId = null;
+    closePanel();
+    saveToLocalStorage();
+    scheduleRender(true);
+  }
+}
+
+function handleRedo() {
+  const restored = redo(state.mindmap.root);
+  if (restored) {
+    state.mindmap.root = restored;
+    state.selectedNodeId = null;
+    closePanel();
+    saveToLocalStorage();
+    scheduleRender(true);
+  }
+}
+
+function handleSave() {
+  saveToLocalStorage();
+  exportJSON(state.mindmap);
+}
+
+function handleResetZoom() {
+  state.zoom = 1;
+  fitToScreen();
+  scheduleRender(false);
+}
+
+function handleCollapse(collapse) {
+  if (!state.selectedNodeId) return;
+  const node = findNode(state.mindmap.root, state.selectedNodeId);
+  if (!node || !node.children || node.children.length === 0) return;
+  if (collapse && !node.collapsed) {
+    toggleCollapse(state.mindmap.root, state.selectedNodeId);
+  } else if (!collapse && node.collapsed) {
+    toggleCollapse(state.mindmap.root, state.selectedNodeId);
+  }
+  saveHistory(state.mindmap.root);
+  saveToLocalStorage();
+  scheduleRender(true);
+}
+
+function handleContextAction(action, nodeId) {
+  switch (action) {
+    case 'edit':
+      state.selectedNodeId = nodeId;
+      startEdit(nodeId);
+      break;
+    case 'drill':
+      if (drillDown(state.mindmap.root, nodeId)) {
+        state.selectedNodeId = null;
+        closePanel();
+        scheduleRender(true);
+      }
+      break;
+    case 'copy':
+      state.selectedNodeId = nodeId;
+      break;
+    case 'delete':
+      state.selectedNodeId = nodeId;
+      handleDelete();
+      break;
+    case 'collapse':
+      state.selectedNodeId = nodeId;
+      const node = findNode(state.mindmap.root, nodeId);
+      if (node) handleCollapse(!node.collapsed);
+      break;
+  }
+}
+
+// ===================== Canvas 尺寸 =====================
 function resizeCanvas() {
   const container = document.getElementById('canvasContainer');
   state.canvas.width = container.clientWidth;
   state.canvas.height = container.clientHeight;
-  // 初始居中
   if (!state._initialFit) {
     state._initialFit = true;
     setTimeout(() => fitToScreen(), 100);
@@ -444,7 +615,10 @@ function resizeCanvas() {
 function fitToScreen() {
   const root = getDisplayRoot(state.mindmap.root);
   if (!root) return;
-  doLayout(root, state.ctx);
+  if (state._layoutDirty) {
+    doLayout(root, state.ctx);
+    state._layoutDirty = false;
+  }
   const bounds = getBounds(root);
   const w = state.canvas.width;
   const h = state.canvas.height;
@@ -483,7 +657,6 @@ function handleSearch() {
   const results = searchNodes(q);
   if (results.length > 0) {
     const sel = results[0];
-    // 重建 drill stack
     drillStack = [];
     const parts = sel.path.split(' › ');
     let current = state.mindmap.root;
@@ -497,7 +670,7 @@ function handleSearch() {
       }
     }
     state.selectedNodeId = sel.node.id;
-    render();
+    scheduleRender(true);
     openPanel(sel.node.id, sel.node.label, sel.node.content);
   }
 }
@@ -520,7 +693,7 @@ function handleFileOpen() {
         saveHistory(state.mindmap.root);
         saveToLocalStorage();
         fitToScreen();
-        render();
+        scheduleRender(true);
       } else {
         alert('无效的思维导图文件格式');
       }
@@ -549,7 +722,7 @@ function handleNew() {
     saveHistory(state.mindmap.root);
     saveToLocalStorage();
     fitToScreen();
-    render();
+    scheduleRender(true);
   }
 }
 

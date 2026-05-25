@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Mindmap Blog</title>
 <style>
 :root {
@@ -13,57 +13,71 @@
   --border: #e0e0e0;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  height: 100%; overflow: hidden;
+  /* 防止移动端 rubber-band/bounce 效果 */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
 body {
   font-family: -apple-system, 'Segoe UI', 'PingFang SC', sans-serif;
   background: var(--bg); color: var(--text);
-  height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  display: flex; flex-direction: column;
 }
 
 /* ===== Toolbar ===== */
 .toolbar {
   background: #fff; border-bottom: 1px solid var(--border);
-  padding: 0 12px; display: flex; align-items: center; height: 44px; gap: 4px; flex-shrink: 0;
+  padding: 0 8px; display: flex; align-items: center; height: 40px; gap: 2px; flex-shrink: 0;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
-.toolbar .logo { color: var(--red); font-size: 16px; font-weight: 700; margin-right: 8px; }
-.toolbar .sep { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
+.toolbar .logo { color: var(--red); font-size: 14px; font-weight: 700; margin-right: 6px; white-space: nowrap; }
+.toolbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
 .btn {
-  padding: 6px 12px; border: 1px solid var(--border); background: #fff;
-  border-radius: 6px; cursor: pointer; font-size: 12px; color: #555; white-space: nowrap;
-  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border: 1px solid var(--border); background: #fff;
+  border-radius: 6px; cursor: pointer; font-size: 11px; color: #555; white-space: nowrap;
+  display: flex; align-items: center; gap: 3px; flex-shrink: 0;
+  /* 移动端增大点击区域 */
+  min-height: 30px; min-width: 30px;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn:hover { background: #f5f5f5; border-color: #ccc; }
+.btn:active { background: #eee; }
 .btn.primary { background: var(--red); color: #fff; border-color: var(--red); }
-.btn.primary:hover { background: #C62828; }
+.btn.primary:active { background: #C62828; }
 
 /* ===== Breadcrumb ===== */
 .breadcrumb-bar {
   background: #fff; border-bottom: 1px solid var(--border);
-  padding: 0 16px; display: flex; align-items: center; height: 32px; flex-shrink: 0;
+  padding: 0 12px; display: flex; align-items: center; height: 30px; flex-shrink: 0;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
-#breadcrumb { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+#breadcrumb { display: flex; align-items: center; gap: 3px; font-size: 11px; white-space: nowrap; }
 #breadcrumb span { color: var(--muted); }
 #breadcrumb a { color: #1976D2; text-decoration: none; cursor: pointer; white-space: nowrap; }
-#breadcrumb a:hover { text-decoration: underline; }
+#breadcrumb a:active { text-decoration: underline; }
 #breadcrumb a.current { color: var(--red); font-weight: 600; }
-.search-bar { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.search-bar { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .search-bar input {
-  border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
-  font-size: 12px; width: 160px; outline: none;
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px;
+  font-size: 11px; width: 130px; outline: none; background: #fafafa;
 }
 .search-bar input:focus { border-color: var(--red); }
 
 /* ===== Main Canvas ===== */
 #canvasContainer {
   flex: 1; overflow: hidden; position: relative;
+  /* 禁止浏览器默认触摸行为（双指缩放、滑动导航） */
+  touch-action: none;
 }
 #mindmapCanvas { display: block; }
 
 /* ===== Status Bar ===== */
 .statusbar {
   background: #fff; border-top: 1px solid var(--border);
-  padding: 0 16px; display: flex; align-items: center; height: 24px; flex-shrink: 0;
-  font-size: 11px; color: #aaa; gap: 12px;
+  padding: 0 12px; display: flex; align-items: center; height: 22px; flex-shrink: 0;
+  font-size: 10px; color: #aaa; gap: 10px; overflow: hidden;
 }
+.statusbar span { white-space: nowrap; }
 
 /* ===== Dropdown ===== */
 .dropdown { position: relative; display: inline-block; }
@@ -76,17 +90,29 @@ body {
 .dropdown-menu button {
   display: block; width: 100%; padding: 8px 16px; border: none; background: none;
   text-align: left; cursor: pointer; font-size: 13px; color: #333;
+  -webkit-tap-highlight-color: transparent;
 }
-.dropdown-menu button:hover { background: #f5f5f5; }
+.dropdown-menu button:active { background: #f5f5f5; }
 
 /* ===== Context Menu ===== */
 .ctx-item {
   padding: 8px 16px; cursor: pointer; display: flex; align-items: center;
   font-size: 13px; color: #333;
+  -webkit-tap-highlight-color: transparent;
 }
-.ctx-item:hover { background: #f5f5f5; }
+.ctx-item:active { background: #f5f5f5; }
 .ctx-item[style*="color:#ccc"] { cursor: default; }
-.ctx-item[style*="color:#ccc"]:hover { background: transparent; }
+.ctx-item[style*="color:#ccc"]:active { background: transparent; }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+  .toolbar { height: 38px; padding: 0 4px; }
+  .toolbar .logo { font-size: 13px; }
+  .btn { padding: 4px 8px; font-size: 10px; }
+  .breadcrumb-bar { height: 28px; }
+  .statusbar { font-size: 9px; }
+  .search-bar input { width: 100px; }
+}
 </style>
 </head>
 <body>
@@ -132,7 +158,7 @@ body {
 <div class="statusbar">
   <span id="nodeCount">—</span>
   <span>|</span>
-  <span>右键下钻 · Backspace返回 · 双击/F2编辑 · Tab子节点 · Enter兄弟节点</span>
+  <span>右键/长按下钻 · 双击/F2编辑 · Tab子节点 · Enter兄弟节点</span>
   <span style="margin-left:auto" id="zoomInfo">100%</span>
 </div>
 
