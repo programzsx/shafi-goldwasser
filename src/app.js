@@ -160,6 +160,18 @@ function doRender() {
 
   ctx.restore();
 
+  // 绘制点击标记（调试用绿点，1 秒后消失）
+  if (state._clickMarker && Date.now() - state._clickMarker.t < 1000) {
+    ctx.fillStyle = '#4CAF50';
+    ctx.beginPath();
+    ctx.arc(state._clickMarker.x, state._clickMarker.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(state._clickMarker.x, state._clickMarker.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // 更新面包屑
   renderBreadcrumb(state.mindmap.root);
 
@@ -192,8 +204,9 @@ function setupCanvasEvents() {
   const container = document.getElementById('canvasContainer');
 
   // --- 鼠标事件 ---
+  // mousedown: 只处理平移和折叠按钮（不处理编辑）
   container.addEventListener('mousedown', (e) => {
-    // 如果正在编辑中，点击其他地方 → 先提交编辑
+    // 如果正在编辑中，点击输入框外 → 先提交编辑
     if (state.editingNodeId && e.target !== state.editInput) {
       commitEdit();
     }
@@ -210,31 +223,34 @@ function setupCanvasEvents() {
       const root = getDisplayRoot(state.mindmap.root);
       const hit = hitTest(world.x, world.y, root);
 
+      // 折叠按钮
       if (hit && hit.hitCollapse) {
         toggleCollapse(state.mindmap.root, hit.node.id);
         saveHistory(state.mindmap.root);
         saveToLocalStorage();
         scheduleRender(true);
-        return;
       }
+    }
+  });
 
-      if (hit) {
-        // 点击已选中的节点 → 直接进入编辑
-        if (hit.node.id === state.selectedNodeId) {
-          startEdit(hit.node.id);
-          scheduleRender(false);
-        } else {
-          state.selectedNodeId = hit.node.id;
-          scheduleRender(false);
-          if (isPanelOpen()) {
-            const fullNode = findNode(state.mindmap.root, hit.node.id);
-            if (fullNode) openPanel(fullNode.id, fullNode.label, fullNode.content);
-          }
-        }
-      } else {
-        state.selectedNodeId = null;
-        scheduleRender(false);
-      }
+  // click: 单击节点 → 编辑（比 mousedown 更可靠）
+  container.addEventListener('click', (e) => {
+    // 加点击标记（调试用：在点击位置画小绿点）
+    state._clickMarker = { x: e.clientX, y: e.clientY, t: Date.now() };
+    scheduleRender(false);
+
+    const world = screenToWorld(e.clientX, e.clientY, state);
+    const root = getDisplayRoot(state.mindmap.root);
+    const hit = hitTest(world.x, world.y, root);
+
+    if (hit && !hit.hitCollapse) {
+      // 单击任意节点 → 直接编辑
+      state.selectedNodeId = hit.node.id;
+      startEdit(hit.node.id);
+    } else if (!hit) {
+      // 点击空白 → 取消选中
+      state.selectedNodeId = null;
+      scheduleRender(false);
     }
   });
 
@@ -296,7 +312,7 @@ function setupCanvasEvents() {
     }
   });
 
-  // 双击 → 编辑
+  // 双击保留作为备用
   container.addEventListener('dblclick', (e) => {
     const world = screenToWorld(e.clientX, e.clientY, state);
     const root = getDisplayRoot(state.mindmap.root);
@@ -304,7 +320,6 @@ function setupCanvasEvents() {
     if (hit && !hit.hitCollapse) {
       state.selectedNodeId = hit.node.id;
       startEdit(hit.node.id);
-      scheduleRender(false);
     }
   });
 
