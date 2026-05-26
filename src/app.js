@@ -193,6 +193,11 @@ function setupCanvasEvents() {
 
   // --- 鼠标事件 ---
   container.addEventListener('mousedown', (e) => {
+    // 如果正在编辑中，点击其他地方 → 先提交编辑
+    if (state.editingNodeId && e.target !== state.editInput) {
+      commitEdit();
+    }
+
     if (e.button === 1 || state.isSpaceDown || (e.button === 0 && e.altKey)) {
       state.isPanning = true;
       state.panStart = { x: e.clientX - state.panX, y: e.clientY - state.panY };
@@ -435,10 +440,12 @@ function onTouchEnd(e) {
 function startEdit(nodeId) {
   const node = findNode(state.mindmap.root, nodeId);
   if (!node) return;
+
+  // 安全移除旧输入框（可能已被 blur 事件移除）
+  if (state.editInput) {
+    try { state.editInput.remove(); } catch(e) { /* 已被移除 */ }
+  }
   state.editingNodeId = nodeId;
-
-  if (state.editInput) state.editInput.remove();
-
   // 确保布局是最新的
   if (state._layoutDirty) {
     doLayout(getDisplayRoot(state.mindmap.root), state.ctx);
@@ -473,7 +480,7 @@ function startEdit(nodeId) {
     if (e.key === 'Enter') commitEdit();
     else if (e.key === 'Escape') cancelEdit();
   });
-  input.addEventListener('blur', () => commitEdit());
+  // 不用 blur 自动提交——改为点击画布空白时提交（逻辑在 mousedown handler 中）
 }
 
 function commitEdit() {
