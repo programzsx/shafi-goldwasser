@@ -65,8 +65,8 @@ function initApp() {
     onRedo: handleRedo,
     onSave: handleSave,
     onResetZoom: handleResetZoom,
-    onSpaceDown: () => { state.isSpaceDown = true; state.canvas.style.cursor = 'grab'; },
-    onSpaceUp: () => { state.isSpaceDown = false; if (!state.isPanning) state.canvas.style.cursor = 'default'; },
+    onSpaceDown: () => { state.isSpaceDown = true; document.getElementById('canvasContainer').style.cursor = 'grab'; },
+    onSpaceUp: () => { state.isSpaceDown = false; if (!state.isPanning) document.getElementById('canvasContainer').style.cursor = 'default'; },
     onCollapse: handleCollapse,
     onSearch: () => document.getElementById('searchInput')?.focus(),
     onCancelEdit: cancelEdit,
@@ -95,11 +95,11 @@ function initApp() {
   // 保存初始历史
   saveHistory(state.mindmap.root);
 
-  // 初始渲染
-  state.selectedNodeId = state.mindmap.root.id;  // 默认选中根节点
+  // 初始渲染：同步渲染确保 _hitRect 立即可用（首次点击前）
+  state.selectedNodeId = state.mindmap.root.id;
   resizeCanvas();
+  renderNow();
   window.addEventListener('resize', () => { resizeCanvas(); scheduleRender(true); });
-  scheduleRender(true);
 }
 
 // ===================== 渲染调度（核心优化） =====================
@@ -188,14 +188,15 @@ function updateStatusBar() {
 
 // ===================== Canvas 事件 =====================
 function setupCanvasEvents() {
-  const c = state.canvas;
+  // 把所有事件挂在 container div 上（而非 canvas），更可靠
+  const container = document.getElementById('canvasContainer');
 
   // --- 鼠标事件 ---
-  c.addEventListener('mousedown', (e) => {
+  container.addEventListener('mousedown', (e) => {
     if (e.button === 1 || state.isSpaceDown || (e.button === 0 && e.altKey)) {
       state.isPanning = true;
       state.panStart = { x: e.clientX - state.panX, y: e.clientY - state.panY };
-      c.style.cursor = 'grabbing';
+      container.style.cursor = 'grabbing';
       return;
     }
 
@@ -232,7 +233,7 @@ function setupCanvasEvents() {
     }
   });
 
-  c.addEventListener('mousemove', (e) => {
+  container.addEventListener('mousemove', (e) => {
     if (state.isPanning) {
       state.panX = e.clientX - state.panStart.x;
       state.panY = e.clientY - state.panStart.y;
@@ -247,26 +248,26 @@ function setupCanvasEvents() {
     const newHover = hit && !hit.hitCollapse ? hit.node.id : null;
     if (newHover !== state.hoveredNodeId) {
       state.hoveredNodeId = newHover;
-      c.style.cursor = newHover ? 'pointer' : (state.isSpaceDown ? 'grab' : 'default');
+      container.style.cursor = newHover ? 'pointer' : (state.isSpaceDown ? 'grab' : 'default');
       scheduleRender(false);
     }
   });
 
-  c.addEventListener('mouseup', () => {
+  container.addEventListener('mouseup', () => {
     state.isPanning = false;
-    c.style.cursor = state.isSpaceDown ? 'grab' : (state.hoveredNodeId ? 'pointer' : 'default');
+    container.style.cursor = state.isSpaceDown ? 'grab' : (state.hoveredNodeId ? 'pointer' : 'default');
   });
 
-  c.addEventListener('mouseleave', () => {
+  container.addEventListener('mouseleave', () => {
     state.isPanning = false;
     if (state.hoveredNodeId !== null) {
       state.hoveredNodeId = null;
-      c.style.cursor = 'default';
+      container.style.cursor = 'default';
       scheduleRender(false);
     }
   });
 
-  c.addEventListener('wheel', (e) => {
+  container.addEventListener('wheel', (e) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.min(3, Math.max(0.3, state.zoom * delta));
@@ -280,7 +281,7 @@ function setupCanvasEvents() {
   }, { passive: false });
 
   // 右键 → 下钻
-  c.addEventListener('contextmenu', (e) => {
+  container.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const world = screenToWorld(e.clientX, e.clientY, state);
     const root = getDisplayRoot(state.mindmap.root);
@@ -291,7 +292,7 @@ function setupCanvasEvents() {
   });
 
   // 双击 → 编辑
-  c.addEventListener('dblclick', (e) => {
+  container.addEventListener('dblclick', (e) => {
     const world = screenToWorld(e.clientX, e.clientY, state);
     const root = getDisplayRoot(state.mindmap.root);
     const hit = hitTest(world.x, world.y, root);
@@ -303,9 +304,9 @@ function setupCanvasEvents() {
   });
 
   // --- 触摸事件（移动端支持） ---
-  c.addEventListener('touchstart', onTouchStart, { passive: false });
-  c.addEventListener('touchmove', onTouchMove, { passive: false });
-  c.addEventListener('touchend', onTouchEnd, { passive: false });
+  container.addEventListener('touchstart', onTouchStart, { passive: false });
+  container.addEventListener('touchmove', onTouchMove, { passive: false });
+  container.addEventListener('touchend', onTouchEnd, { passive: false });
 }
 
 // ===================== 触摸支持 =====================
