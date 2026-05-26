@@ -444,6 +444,7 @@ function startEdit(nodeId) {
   // 安全移除旧输入框（可能已被 blur 事件移除）
   if (state.editInput) {
     try { state.editInput.remove(); } catch(e) { /* 已被移除 */ }
+    state.editInput = null;
   }
   state.editingNodeId = nodeId;
   // 确保布局是最新的
